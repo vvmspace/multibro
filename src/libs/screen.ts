@@ -1,10 +1,15 @@
 import { execFileSync } from 'node:child_process';
 
-const FALLBACK_SIZE = { width: 1920, height: 1080 };
+export interface ScreenSize {
+  width: number;
+  height: number;
+}
 
-let cached;
+const FALLBACK_SIZE: ScreenSize = { width: 1920, height: 1080 };
 
-function detect() {
+let cached: ScreenSize | undefined;
+
+function detect(): ScreenSize {
   try {
     if (process.platform === 'darwin') {
       const out = execFileSync('osascript', [
@@ -46,7 +51,7 @@ function detect() {
 // Detects the primary screen resolution; memoized since it can't change
 // mid-run. Falls back to a sane default if detection fails (headless CI,
 // missing xrandr, etc.).
-export function getScreenSize() {
+export function getScreenSize(): ScreenSize {
   if (!cached) cached = detect();
   return cached;
 }

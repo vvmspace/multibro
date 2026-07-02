@@ -1,10 +1,11 @@
-import { chromium } from 'playwright';
+import { chromium, type BrowserContext } from 'playwright';
 import { getScreenSize } from './screen.js';
+import type { ProxyEntry } from './types.js';
 
 // Reference viewport for a 13" MacBook Air (default logical/CSS resolution).
 const MACBOOK_AIR_13 = { width: 1440, height: 900 };
 
-function randomInt(min, max) {
+function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
@@ -64,10 +65,22 @@ const WEBRTC_LEAK_ARGS = [
   '--webrtc-ip-handling-policy=disable_non_proxied_udp',
 ];
 
-export async function openBrowser({ userDataDir, proxy, url, headless = false }) {
+export interface OpenBrowserOptions {
+  userDataDir: string;
+  proxy?: ProxyEntry;
+  url?: string;
+  headless?: boolean;
+}
+
+export async function openBrowser({
+  userDataDir,
+  proxy,
+  url,
+  headless = false,
+}: OpenBrowserOptions): Promise<BrowserContext> {
   const { width, height } = computeWindowSize();
 
-  const launchOptions = {
+  const launchOptions: Parameters<typeof chromium.launchPersistentContext>[1] = {
     headless,
     viewport: null,
     args: [...WEBRTC_LEAK_ARGS, `--window-size=${width},${height}`],
@@ -82,8 +95,9 @@ export async function openBrowser({ userDataDir, proxy, url, headless = false })
 
   const page = context.pages()[0] ?? (await context.newPage());
   if (url) {
-    await page.goto(url, { waitUntil: 'domcontentloaded' }).catch((err) => {
-      console.warn(`Failed to open ${url}: ${err.message}`);
+    await page.goto(url, { waitUntil: 'domcontentloaded' }).catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`Failed to open ${url}: ${message}`);
     });
   }
 

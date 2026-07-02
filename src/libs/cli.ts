@@ -1,7 +1,7 @@
 // Parses a bro id list like "1,2,4-6,7" into a sorted, de-duplicated array
 // of integers: [1, 2, 4, 5, 6, 7].
-export function parseIdList(str) {
-  const ids = new Set();
+export function parseIdList(str: string): number[] {
+  const ids = new Set<number>();
   for (const rawPart of str.split(',')) {
     const part = rawPart.trim();
     if (!part) continue;
@@ -23,13 +23,21 @@ export function parseIdList(str) {
 
 const URL_RE = /^https?:\/\//i;
 
+export interface ParsedArgs {
+  list?: string;
+  url?: string;
+  country?: string;
+  protocol?: string;
+  help: boolean;
+}
+
 // Splits argv into { list, url, country, protocol }. Both `list` and `url`
 // are order-independent positional args; whichever looks like a URL becomes
 // `url`, the other becomes `list`.
-export function parseArgs(argv) {
-  const positional = [];
-  let country;
-  let protocol;
+export function parseArgs(argv: string[]): ParsedArgs {
+  const positional: string[] = [];
+  let country: string | undefined;
+  let protocol: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -51,8 +59,8 @@ export function parseArgs(argv) {
   const help = positional.includes('--help') || positional.includes('-h');
   const rest = positional.filter((a) => a !== '--help' && a !== '-h');
 
-  let list;
-  let url;
+  let list: string | undefined;
+  let url: string | undefined;
   for (const token of rest) {
     if (URL_RE.test(token)) {
       if (url === undefined) url = token;

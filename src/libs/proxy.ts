@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import { SocksProxyAgent } from 'socks-proxy-agent';
+import type { ProxyEntry } from './types.js';
 
 const PROXY_LIST_URL =
   'https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.json';
@@ -18,17 +19,31 @@ const LIST_TIMEOUT = 15000;
 const THREADS = 5;
 const SPEED_MULTIPLIER = 2;
 
-function buildAgent(proxy) {
+function buildAgent(proxy: ProxyEntry) {
   if (proxy.protocol && proxy.protocol.toLowerCase().startsWith('socks')) {
     return new SocksProxyAgent(proxy.proxy);
   }
   return new HttpsProxyAgent(proxy.proxy);
 }
 
+export interface CheckResult {
+  ok: boolean;
+  latency: number | null;
+  country: string | null;
+}
+
+interface IpwhoisResponse {
+  success: boolean;
+  country_code?: string;
+}
+
 // Verifies a proxy is alive, measures its latency (ms), and reports the
 // country it actually exits through (via ipwho.is's response, not the
 // proxy list's static geolocation field).
-export async function checkProxy(proxy, { timeout = CHECK_TIMEOUT } = {}) {
+export async function checkProxy(
+  proxy: ProxyEntry,
+  { timeout = CHECK_TIMEOUT }: { timeout?: number } = {}
+): Promise<CheckResult> {
   const agent = buildAgent(proxy);
   const start = Date.now();
   try {
@@ -36,7 +51,7 @@ export async function checkProxy(proxy, { timeout = CHECK_TIMEOUT } = {}) {
     // proxy that never completes its TCP/CONNECT handshake can hang far
     // past `timeout`. AbortSignal.timeout forcibly kills it regardless of
     // which stage it's stuck in.
-    const { data } = await axios.get(CHECK_URL, {
+    const { data } = await axios.get<IpwhoisResponse>(CHECK_URL, {
       httpAgent: agent,
       httpsAgent: agent,
       proxy: false,
@@ -50,23 +65,47 @@ export async function checkProxy(proxy, { timeout = CHECK_TIMEOUT } = {}) {
   }
 }
 
-export async function fetchProxyList() {
-  const { data } = await axios.get(PROXY_LIST_URL, { timeout: LIST_TIMEOUT });
+export async function fetchProxyList(): Promise<ProxyEntry[]> {
+  const { data } = await axios.get<ProxyEntry[]>(PROXY_LIST_URL, { timeout: LIST_TIMEOUT });
   return Array.isArray(data) ? data : [];
 }
 
-export function filterByCountry(list, country) {
+export function filterByCountry(list: ProxyEntry[], country?: string): ProxyEntry[] {
   if (!country || country.toUpperCase() === 'ANY') return list;
   return list.filter(
     (p) => p.geolocation?.country?.toUpperCase() === country.toUpperCase()
   );
 }
 
-export function filterByProtocol(list, protocol) {
+export function filterByProtocol(list: ProxyEntry[], protocol?: string): ProxyEntry[] {
   if (!protocol || protocol.toUpperCase() === 'ANY') return list;
   return list.filter(
     (p) => p.protocol?.toUpperCase() === protocol.toUpperCase()
   );
+}
+
+export interface FoundProxy extends ProxyEntry {
+  latency: number;
+}
+
+export interface CheckEvent {
+  proxy: ProxyEntry;
+  ok: boolean;
+  latency: number | null;
+  exitCountry: string | null;
+  matched: boolean;
+}
+
+export interface ProgressEvent {
+  checked: number;
+  total: number;
+  found: number;
+}
+
+export interface FindOptions {
+  concurrency?: number;
+  onProgress?: (event: ProgressEvent) => void;
+  onCheck?: (event: CheckEvent) => void;
 }
 
 // Searches the free-proxy list for working proxies of the given country and
@@ -80,12 +119,12 @@ export function filterByProtocol(list, protocol) {
 // working, country-confirmed proxies sorted by ascending latency (fastest
 // first).
 export async function findWorkingProxies(
-  needed,
-  country,
-  protocol,
-  excludeProxyUrls = new Set(),
-  { concurrency = THREADS, onProgress, onCheck } = {}
-) {
+  needed: number,
+  country: string | undefined,
+  protocol: string | undefined,
+  excludeProxyUrls: Set<string> = new Set(),
+  { concurrency = THREADS, onProgress, onCheck }: FindOptions = {}
+): Promise<FoundProxy[]> {
   if (needed <= 0) return [];
 
   const all = await fetchProxyList();
@@ -95,19 +134,19 @@ export async function findWorkingProxies(
   const wantCountry = country && country.toUpperCase() !== 'ANY' ? country.toUpperCase() : null;
 
   const target = needed * SPEED_MULTIPLIER;
-  const found = [];
+  const found: FoundProxy[] = [];
   let checked = 0;
 
   for (let i = 0; i < candidates.length && found.length < target; i += concurrency) {
     const batch = candidates.slice(i, i + concurrency);
     const results = await Promise.all(
-      batch.map(async (p) => {
+      batch.map(async (p): Promise<FoundProxy | null> => {
         const { ok, latency, country: exitCountry } = await checkProxy(p, {
           timeout: CANDIDATE_CHECK_TIMEOUT,
         });
         const matched = ok && (!wantCountry || exitCountry?.toUpperCase() === wantCountry);
         onCheck?.({ proxy: p, ok, latency, exitCountry, matched });
-        if (!ok) return null;
+        if (!ok || latency === null) return null;
         if (wantCountry && exitCountry?.toUpperCase() !== wantCountry) return null;
         return { ...p, latency };
       })

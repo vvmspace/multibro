@@ -4,10 +4,11 @@ import prompts from 'prompts';
 
 import { parseArgs, parseIdList } from './src/libs/cli.js';
 import { loadConfig, saveConfig, resolveUserDir, getBroUserDir } from './src/libs/config.js';
-import { checkProxy, findWorkingProxies } from './src/libs/proxy.js';
+import { checkProxy, findWorkingProxies, type CheckEvent, type FoundProxy } from './src/libs/proxy.js';
 import { openBrowser } from './src/libs/browser.js';
+import type { Bro, Config } from './src/libs/types.js';
 
-function printUsage() {
+function printUsage(): void {
   console.log(`Usage: multibro [list] [url] [--country=DE | -c DE] [--protocol=http | -p http]
 
   list      bro ids to open, e.g. "1,2,4-6,7" (default: all bros in bros.json)
@@ -23,18 +24,24 @@ Examples:
 
 // Strips the transient `latency` field measured during the speed check
 // before persisting a proxy into bros.json.
-function toStoredProxy(candidate) {
+function toStoredProxy(candidate: FoundProxy) {
   const { latency, ...proxy } = candidate;
   return proxy;
 }
 
-function logProxyCheck({ proxy, ok, latency, exitCountry, matched }) {
+function logProxyCheck({ proxy, ok, latency, exitCountry, matched }: CheckEvent): void {
   const status = !ok ? 'DEAD' : matched ? 'OK' : `WRONG COUNTRY (${exitCountry ?? '?'})`;
   const timing = ok ? ` ${latency}ms` : '';
   console.log(`  Checking ${proxy.proxy} (${proxy.protocol})...${timing} ${status}`);
 }
 
-function assignProxy(config, byId, id, candidate, countryUsed) {
+function assignProxy(
+  config: Config,
+  byId: Map<number, Bro>,
+  id: number,
+  candidate: FoundProxy,
+  countryUsed?: string
+): Bro {
   let bro = byId.get(id);
   if (!bro) {
     bro = { id, user_dir: `bro${id}` };
@@ -48,18 +55,23 @@ function assignProxy(config, byId, id, candidate, countryUsed) {
   return bro;
 }
 
-function effectiveCountry(id, byId, cliCountry, config) {
+function effectiveCountry(
+  id: number,
+  byId: Map<number, Bro>,
+  cliCountry: string | undefined,
+  config: Config
+): string | undefined {
   const bro = byId.get(id);
   return bro?.country || cliCountry || config.country;
 }
 
 // Protocol filter is global (not per-bro): --protocol/-p flag > bros.json's
 // `protocol` field > "http" by default. Pass ANY to disable filtering.
-function effectiveProtocol(cliProtocol, config) {
+function effectiveProtocol(cliProtocol: string | undefined, config: Config): string {
   return cliProtocol || config.protocol || 'http';
 }
 
-async function main() {
+async function main(): Promise<void> {
   const { list, url, country: cliCountry, protocol: cliProtocol, help } = parseArgs(
     process.argv.slice(2)
   );
@@ -70,7 +82,7 @@ async function main() {
   }
 
   const config = loadConfig();
-  const byId = new Map(config.bros.map((b) => [b.id, b]));
+  const byId = new Map<number, Bro>(config.bros.map((b) => [b.id, b]));
 
   const requestedIds = list ? parseIdList(list) : [...byId.keys()].sort((a, b) => a - b);
   if (requestedIds.length === 0) {
@@ -82,7 +94,7 @@ async function main() {
 
   // Step 2: check proxies of existing bros; anything missing or dead needs a
   // fresh proxy assignment.
-  const needsProxy = [];
+  const needsProxy: number[] = [];
   for (const id of requestedIds) {
     const bro = byId.get(id);
     if (!bro || !bro.proxy) {
@@ -98,21 +110,21 @@ async function main() {
   if (needsProxy.length > 0) {
     const protocol = effectiveProtocol(cliProtocol, config);
     const existingProxyUrls = new Set(
-      config.bros.map((b) => b.proxy?.proxy).filter(Boolean)
+      config.bros.map((b) => b.proxy?.proxy).filter((p): p is string => Boolean(p))
     );
 
     // Group ids by the country that should be searched for them (per-bro
     // country > --country flag > global config country > ANY). Protocol is
     // global for the whole run, so it isn't grouped.
-    const groups = new Map(); // countryKey -> ids[]
+    const groups = new Map<string, number[]>(); // countryKey -> ids[]
     for (const id of needsProxy) {
       const country = effectiveCountry(id, byId, cliCountry, config);
       const key = country || 'ANY';
       if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(id);
+      groups.get(key)!.push(id);
     }
 
-    const unresolved = [];
+    const unresolved: number[] = [];
     for (const [country, ids] of groups) {
       console.log(
         `Searching ${ids.length} proxy(ies) for country=${country}, protocol=${protocol}...`
@@ -153,7 +165,7 @@ async function main() {
   }
 
   // Step 4: open the requested browsers.
-  const launches = [];
+  const launches: Promise<void>[] = [];
   for (const id of requestedIds) {
     const bro = byId.get(id);
     if (!bro?.proxy) {
@@ -162,16 +174,20 @@ async function main() {
     }
     const userDataDir = resolveUserDir(getBroUserDir(bro), config);
     launches.push(
-      openBrowser({ userDataDir, proxy: bro.proxy, url }).catch((err) => {
-        console.error(`Failed to open bro ${id}: ${err.message}`);
-      })
+      openBrowser({ userDataDir, proxy: bro.proxy, url }).then(
+        () => undefined,
+        (err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`Failed to open bro ${id}: ${message}`);
+        }
+      )
     );
   }
 
   await Promise.all(launches);
 }
 
-main().catch((err) => {
+main().catch((err: unknown) => {
   console.error(err);
   process.exitCode = 1;
 });

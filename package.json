@@ -4,13 +4,17 @@
   "description": "CLI tool for managing browser-proxy bundles (bro = browser)",
   "type": "module",
   "bin": {
-    "multibro": "./index.js"
+    "multibro": "./dist/index.js"
   },
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "start": "node index.js"
+    "build": "tsc && chmod +x dist/index.js",
+    "prepare": "npm run build",
+    "start": "node dist/index.js",
+    "dev": "tsx index.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "axios": "^1.7.9",
@@ -19,5 +23,11 @@
     "playwright": "^1.49.1",
     "prompts": "^2.4.2",
     "socks-proxy-agent": "^8.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "@types/prompts": "^2.4.9",
+    "tsx": "^4.22.5",
+    "typescript": "^6.0.3"
   }
 }
