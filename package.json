@@ -1,0 +1,23 @@
+{
+  "name": "multibro",
+  "version": "0.1.0",
+  "description": "CLI tool for managing browser-proxy bundles (bro = browser)",
+  "type": "module",
+  "bin": {
+    "multibro": "./index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "https-proxy-agent": "^7.0.6",
+    "playwright": "^1.49.1",
+    "prompts": "^2.4.2",
+    "socks-proxy-agent": "^8.0.5"
+  }
+}
