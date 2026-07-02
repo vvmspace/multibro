@@ -1,9 +1,32 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { chromium, type BrowserContext } from 'playwright';
 import { getScreenSize } from './screen.js';
 import type { ProxyEntry } from './types.js';
 
 // Reference viewport for a 13" MacBook Air (default logical/CSS resolution).
 const MACBOOK_AIR_13 = { width: 1440, height: 900 };
+
+// Playwright's browser binaries are downloaded separately from `npm install`
+// (into a cache dir, not node_modules), so a fresh checkout has none. Rather
+// than making users remember to run `npx playwright install chromium`
+// themselves, check whether it's already there and fetch it transparently
+// if not.
+export function ensureChromiumInstalled(): void {
+  const execPath = chromium.executablePath();
+  if (execPath && fs.existsSync(execPath)) return;
+
+  console.log('Chromium not found — downloading it now (one-off, ~100MB)...');
+  // `playwright/cli.js` isn't a public subpath in the package's `exports`
+  // map, so it can't be require.resolve()'d directly; resolve the package
+  // root instead (which is exported) and locate cli.js on disk from there.
+  const require = createRequire(import.meta.url);
+  const pkgJsonPath = require.resolve('playwright/package.json');
+  const cliPath = path.join(path.dirname(pkgJsonPath), 'cli.js');
+  execFileSync(process.execPath, [cliPath, 'install', 'chromium'], { stdio: 'inherit' });
+}
 
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;

@@ -5,7 +5,7 @@ import prompts from 'prompts';
 import { parseArgs, parseIdList } from './src/libs/cli.js';
 import { loadConfig, saveConfig, resolveUserDir, getBroUserDir } from './src/libs/config.js';
 import { checkProxy, findWorkingProxies, type CheckEvent, type FoundProxy } from './src/libs/proxy.js';
-import { openBrowser } from './src/libs/browser.js';
+import { openBrowser, ensureChromiumInstalled } from './src/libs/browser.js';
 import type { Bro, Config } from './src/libs/types.js';
 
 function printUsage(): void {
@@ -80,6 +80,8 @@ async function main(): Promise<void> {
     printUsage();
     return;
   }
+
+  ensureChromiumInstalled();
 
   const config = loadConfig();
   const byId = new Map<number, Bro>(config.bros.map((b) => [b.id, b]));
