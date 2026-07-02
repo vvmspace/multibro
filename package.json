@@ -1,11 +1,36 @@
 {
   "name": "multibro",
   "version": "0.1.0",
-  "description": "CLI tool for managing browser-proxy bundles (bro = browser)",
+  "description": "CLI for spinning up multiple Playwright-driven Chromium browsers, each behind its own automatically-sourced and health-checked proxy",
+  "keywords": [
+    "browser",
+    "proxy",
+    "playwright",
+    "chromium",
+    "multi-accounting",
+    "web-scraping",
+    "automation",
+    "cli",
+    "socks5",
+    "geo-testing"
+  ],
   "type": "module",
   "bin": {
-    "multibro": "./dist/index.js"
+    "multibro": "dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vvmspace/multibro.git"
+  },
+  "homepage": "https://github.com/vvmspace/multibro#readme",
+  "bugs": {
+    "url": "https://github.com/vvmspace/multibro/issues"
+  },
+  "author": "Vladimir V. M.",
+  "license": "MIT",
   "engines": {
     "node": ">=18"
   },
